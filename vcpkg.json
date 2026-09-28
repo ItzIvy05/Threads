@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "threads",
+  "version-string": "1.0.0.0",
+  "dependencies": [
+    "spdlog",
+    "rapidcsv",
+    "directxtk",
+    "simpleini",
+    "clib-util",
+    "clib-utils-qtr",
+    "skse-mcp",
+    "flick-api"
+  ],
+  "builtin-baseline": "ee12231b20c95013c6638d845d04c91559a1d1ff"
+}
