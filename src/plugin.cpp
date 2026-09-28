@@ -9,6 +9,8 @@ namespace {
     bool ignoreBackpack = false;
     bool ignoreEnchanted = false;
     bool logging = true;
+    std::unordered_set<const RE::TESFile*> blacklist;
+    std::unordered_set<const RE::TESForm*> blacklistItems;
 
     void LoadSettings() {
         CSimpleIniA ini;
@@ -22,8 +24,44 @@ namespace {
         logging = ini.GetBoolValue("Settings", "bLogging");
     }
 
+    void LoadBlacklist() {
+        std::ifstream file{ "Data/SKSE/Plugins/Threads.json" };
+
+        if (!file) {
+            SKSE::stl::report_and_fail("Data/SKSE/Plugins/Threads.json is missing");
+        }
+
+        const auto dataHandler = RE::TESDataHandler::GetSingleton();
+        const auto json = nlohmann::json::parse(file);
+
+        for (const auto& plugin : json.at("blacklist")) {
+            if (const auto mod = dataHandler->LookupModByName(plugin.get<std::string>())) {
+                blacklist.insert(mod);
+            }
+        }
+
+        for (const auto& item : json.at("blacklistItems")) {
+            const auto entry = item.get<std::string>();
+            const auto separator = entry.find('~');
+
+            if (separator == std::string::npos) {
+                SKSE::stl::report_and_fail(std::format("Threads.json: \"{}\" must look like 0x800~Plugin.esp", entry));
+            }
+
+            if (const auto mod = dataHandler->LookupModByName(entry.substr(separator + 1))) {
+                auto id = std::stoul(entry.substr(0, separator), nullptr, 16) & 0xFFFFFF;
+
+                if (mod->IsLight()) {
+                    id &= 0xFFF;
+                }
+
+                blacklistItems.insert(dataHandler->LookupForm(id, mod->GetFilename()));
+            }
+        }
+    }
+
     bool IsLoomClothing(const RE::TESObjectARMO* a_armor) {
-        return a_armor->IsClothing() && (a_armor->HasKeyword(armorClothing) || a_armor->HasKeyword(vendorItemClothing)) && !(ignoreBackpack && a_armor->HasPartOf(RE::BIPED_MODEL::BipedObjectSlot::kModBack)) && !(ignoreEnchanted && a_armor->formEnchanting);
+        return a_armor->IsClothing() && (a_armor->HasKeyword(armorClothing) || a_armor->HasKeyword(vendorItemClothing)) && !(ignoreBackpack && a_armor->HasPartOf(RE::BIPED_MODEL::BipedObjectSlot::kModBack)) && !(ignoreEnchanted && a_armor->formEnchanting) && !blacklist.contains(a_armor->GetFile(0)) && !blacklistItems.contains(a_armor);
     }
 
     std::string_view FileName(const RE::TESForm* a_form, std::int32_t a_index) {
@@ -85,12 +123,20 @@ namespace {
         vendorItemClothing = RE::TESForm::LookupByID<RE::BGSKeyword>(0x8F95B);
         leather = RE::TESForm::LookupByID<RE::TESObjectMISC>(0xDB5D2);
         leatherStrips = RE::TESForm::LookupByID<RE::TESObjectMISC>(0x800E4);
+        LoadBlacklist();
 
         auto& recipes = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
         std::unordered_set<RE::TESForm*> crafted;
+        std::unordered_set<RE::TESForm*> leveled;
         std::map<std::string_view, std::uint32_t> skipped;
         std::map<std::string_view, std::uint32_t> moved;
         std::map<std::string_view, std::uint32_t> created;
+
+        for (const auto list : dataHandler->GetFormArray<RE::TESLevItem>()) {
+            for (const auto& entry : list->entries) {
+                leveled.insert(entry.form);
+            }
+        }
 
         for (const auto recipe : recipes) {
             const auto armor = skyrim_cast<RE::TESObjectARMO*>(recipe->createdItem);
@@ -116,7 +162,7 @@ namespace {
         const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSConstructibleObject>();
 
         for (const auto armor : dataHandler->GetFormArray<RE::TESObjectARMO>()) {
-            if (armor->GetPlayable() && armor->GetFullNameLength() > 0 && !armor->templateArmor && IsLoomClothing(armor) && armor->GetArmorAddon(nordRace) && !crafted.contains(armor)) {
+            if (armor->GetPlayable() && armor->GetFullNameLength() > 0 && !armor->templateArmor && IsLoomClothing(armor) && armor->GetArmorAddon(nordRace) && leveled.contains(armor) && !crafted.contains(armor)) {
                 const auto recipe = factory->Create();
                 recipe->benchKeyword = loom;
                 recipe->createdItem = armor;
