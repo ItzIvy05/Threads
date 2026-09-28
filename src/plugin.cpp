@@ -6,8 +6,10 @@ namespace {
     RE::TESObjectMISC* leather = nullptr;
     RE::TESObjectMISC* leatherStrips = nullptr;
     RE::TESObjectMISC* threadSpool = nullptr;
+    RE::BGSPerk* arcaneBlacksmith = nullptr;
     bool ignoreBackpack = false;
     bool ignoreEnchanted = false;
+    bool perkLock = true;
     bool logging = true;
     std::unordered_set<const RE::TESFile*> blacklist;
     std::unordered_set<const RE::TESForm*> blacklistItems;
@@ -15,12 +17,13 @@ namespace {
     void LoadSettings() {
         CSimpleIniA ini;
 
-        if (ini.LoadFile("Data/SKSE/Plugins/Threads.ini") < 0 || !ini.GetValue("Settings", "bIgnoreBackpack") || !ini.GetValue("Settings", "bIgnoreEnchanted") || !ini.GetValue("Settings", "bLogging")) {
+        if (ini.LoadFile("Data/SKSE/Plugins/Threads.ini") < 0 || !ini.GetValue("Settings", "bIgnoreBackpack") || !ini.GetValue("Settings", "bIgnoreEnchanted") || !ini.GetValue("Settings", "bPerkLock") || !ini.GetValue("Settings", "bLogging")) {
             SKSE::stl::report_and_fail("Data/SKSE/Plugins/Threads.ini is missing or incomplete");
         }
 
         ignoreBackpack = ini.GetBoolValue("Settings", "bIgnoreBackpack");
         ignoreEnchanted = ini.GetBoolValue("Settings", "bIgnoreEnchanted");
+        perkLock = ini.GetBoolValue("Settings", "bPerkLock");
         logging = ini.GetBoolValue("Settings", "bLogging");
     }
 
@@ -32,31 +35,36 @@ namespace {
         }
 
         const auto dataHandler = RE::TESDataHandler::GetSingleton();
-        const auto json = nlohmann::json::parse(file);
 
-        for (const auto& plugin : json.at("blacklist")) {
-            if (const auto mod = dataHandler->LookupModByName(plugin.get<std::string>())) {
-                blacklist.insert(mod);
-            }
-        }
+        try {
+            const auto json = nlohmann::json::parse(file);
 
-        for (const auto& item : json.at("blacklistItems")) {
-            const auto entry = item.get<std::string>();
-            const auto separator = entry.find('~');
-
-            if (separator == std::string::npos) {
-                SKSE::stl::report_and_fail(std::format("Threads.json: \"{}\" must look like 0x800~Plugin.esp", entry));
+            for (const auto& plugin : json.at("blacklist")) {
+                if (const auto mod = dataHandler->LookupModByName(plugin.get<std::string>())) {
+                    blacklist.insert(mod);
+                }
             }
 
-            if (const auto mod = dataHandler->LookupModByName(entry.substr(separator + 1))) {
-                auto id = std::stoul(entry.substr(0, separator), nullptr, 16) & 0xFFFFFF;
+            for (const auto& item : json.at("blacklistItems")) {
+                const auto entry = item.get<std::string>();
+                const auto separator = entry.find('~');
 
-                if (mod->IsLight()) {
-                    id &= 0xFFF;
+                if (separator == std::string::npos) {
+                    SKSE::stl::report_and_fail(std::format("Threads.json: \"{}\" must look like 0x800~Plugin.esp", entry));
                 }
 
-                blacklistItems.insert(dataHandler->LookupForm(id, mod->GetFilename()));
+                if (const auto mod = dataHandler->LookupModByName(entry.substr(separator + 1))) {
+                    auto id = std::stoul(entry.substr(0, separator), nullptr, 16) & 0xFFFFFF;
+
+                    if (mod->IsLight()) {
+                        id &= 0xFFF;
+                    }
+
+                    blacklistItems.insert(dataHandler->LookupForm(id, mod->GetFilename()));
+                }
             }
+        } catch (const std::exception& e) {
+            SKSE::stl::report_and_fail(std::format("Data/SKSE/Plugins/Threads.json: {}", e.what()));
         }
     }
 
@@ -105,6 +113,19 @@ namespace {
         }
     }
 
+    void AddPerkLock(RE::BGSConstructibleObject* a_recipe, const RE::TESObjectARMO* a_armor) {
+        if (!perkLock || !a_armor->formEnchanting) {
+            return;
+        }
+
+        const auto condition = new RE::TESConditionItem;
+        condition->data.comparisonValue.f = 1.0f;
+        condition->data.functionData.function = RE::FUNCTION_DATA::FunctionID::kHasPerk;
+        condition->data.functionData.params[0] = arcaneBlacksmith;
+        condition->next = a_recipe->conditions.head;
+        a_recipe->conditions.head = condition;
+    }
+
     void ThreadsofTheNorth() {
         const auto dataHandler = RE::TESDataHandler::GetSingleton();
         const auto loom = dataHandler->LookupForm<RE::BGSKeyword>(0x800, "Threads of the North.esp");
@@ -123,6 +144,7 @@ namespace {
         vendorItemClothing = RE::TESForm::LookupByID<RE::BGSKeyword>(0x8F95B);
         leather = RE::TESForm::LookupByID<RE::TESObjectMISC>(0xDB5D2);
         leatherStrips = RE::TESForm::LookupByID<RE::TESObjectMISC>(0x800E4);
+        arcaneBlacksmith = RE::TESForm::LookupByID<RE::BGSPerk>(0x5218E);
         LoadBlacklist();
 
         auto& recipes = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
@@ -149,6 +171,7 @@ namespace {
                 if (recipe->benchKeyword == forge || recipe->benchKeyword == tanningRack) {
                     recipe->benchKeyword = loom;
                     SetMaterials(recipe->requiredItems, armor);
+                    AddPerkLock(recipe, armor);
 
                     if (logging) {
                         ++moved[FileName(recipe, 0)];
@@ -168,6 +191,7 @@ namespace {
                 recipe->createdItem = armor;
                 recipe->data.numConstructed = 1;
                 SetMaterials(recipe->requiredItems, armor);
+                AddPerkLock(recipe, armor);
                 recipes.push_back(recipe);
 
                 if (logging) {

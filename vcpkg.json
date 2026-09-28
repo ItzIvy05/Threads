@@ -8,9 +8,6 @@
     "directxtk",
     "simpleini",
     "nlohmann-json",
-    "clib-util",
-    "clib-utils-qtr",
-    "skse-mcp",
     "flick-api"
   ],
   "builtin-baseline": "ee12231b20c95013c6638d845d04c91559a1d1ff"

@@ -93,20 +93,31 @@ namespace {
                 Save();
             }
             FUCK::SameLine();
-            FUCK::HelpMarker("Backpacks keeps its own recipes. Takes effect the next time you start the game.");
+            FUCK::HelpMarker("Backpacks keeps its own recipes.");
 
-            if (FUCK::Checkbox("Ignore Enchanted", &ignoreEnchanted)) {
+            if (FUCK::Checkbox("Enable Enchanted", &enchanted)) {
                 Save();
             }
             FUCK::SameLine();
-            FUCK::HelpMarker("Enchanted clothing keeps its own recipes. Takes effect the next time you start the game.");
+            FUCK::HelpMarker("Enchanted clothing moves to the loom and gets loom recipes.");
+
+            FUCK::BeginDisabled(!enchanted);
+
+            if (FUCK::Checkbox("Require Arcane Blacksmith", &perkLock)) {
+                Save();
+            }
+
+            FUCK::EndDisabled();
+            FUCK::SameLine();
+            FUCK::HelpMarker("Enchanted recipes only show up at the loom once you have the Arcane Blacksmith perk.");
         }
 
         void Load() {
             CSimpleIniA ini;
             ini.LoadFile(kIni);
             ignoreBackpack = ini.GetBoolValue("Settings", "bIgnoreBackpack");
-            ignoreEnchanted = ini.GetBoolValue("Settings", "bIgnoreEnchanted");
+            enchanted = !ini.GetBoolValue("Settings", "bIgnoreEnchanted");
+            perkLock = ini.GetBoolValue("Settings", "bPerkLock");
         }
 
     private:
@@ -115,12 +126,14 @@ namespace {
             ini.SetSpaces(false);
             ini.LoadFile(kIni);
             ini.SetLongValue("Settings", "bIgnoreBackpack", ignoreBackpack);
-            ini.SetLongValue("Settings", "bIgnoreEnchanted", ignoreEnchanted);
+            ini.SetLongValue("Settings", "bIgnoreEnchanted", !enchanted);
+            ini.SetLongValue("Settings", "bPerkLock", perkLock);
             ini.SaveFile(kIni);
         }
 
         bool ignoreBackpack = true;
-        bool ignoreEnchanted = true;
+        bool enchanted = false;
+        bool perkLock = true;
     };
 
     SettingsPage g_settings;

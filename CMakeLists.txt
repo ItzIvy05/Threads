@@ -27,9 +27,6 @@ set(BUILD_TESTS OFF CACHE BOOL " " FORCE)
 add_subdirectory("$ENV{COMMONLIB_SSE_FOLDER}" ${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build)
 get_target_property(COMMONLIB_SRC_DIR CommonLibSSE SOURCE_DIR)
 
-find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
-find_path(CLIB_UTILS_QTR_INCLUDE_DIRS "ClibUtilsQTR/utils.hpp")
-find_path(SKSE_MCP_INCLUDE_DIRS "SKSEMCP/utils.hpp")
 find_path(FLICK_API_INCLUDE_DIRS "FUCK_API.h")
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${headers} ${sources})
@@ -39,7 +36,7 @@ include(${COMMONLIB_SRC_DIR}/cmake/CommonLibSSE.cmake)
 add_commonlibsse_plugin(${PROJECT_NAME} AUTHOR ${AUTHOR_NAME} SOURCES ${headers} ${sources})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_precompile_headers(${PROJECT_NAME} PRIVATE include/PCH.h)
-target_include_directories(${PROJECT_NAME} PRIVATE ${CLIB_UTIL_INCLUDE_DIRS} ${CLIB_UTILS_QTR_INCLUDE_DIRS} ${SKSE_MCP_INCLUDE_DIRS} ${FLICK_API_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PRIVATE ${FLICK_API_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(DEFINED ENV{SKYRIM_MODS_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_MODS_FOLDER}")
   copyOutputs("$ENV{SKYRIM_MODS_FOLDER}/${PRODUCT_NAME}")
